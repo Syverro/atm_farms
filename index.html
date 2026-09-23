@@ -450,7 +450,7 @@
 
                 <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px;">
                     <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-                    <button type="submit" class="btn">Save Job</button>
+                    <button type="submit" class="btn" id="modal-submit-btn">Save Job</button>
                 </div>
             </form>
         </div>
@@ -483,7 +483,7 @@
 
     <!-- Footer -->
     <footer>
-        At The Mile Farms Portal &bull; Version 1.7.0 &bull; Build 2026.09.24
+        At The Mile Farms Portal &bull; Version 1.8.0 &bull; Build 2026.09.24
     </footer>
 
     <script>
@@ -687,16 +687,13 @@
             // Sort by Urgency / Newest (Priority rank: high > medium > low, then newest ID/timestamp first)
             const priorityWeight = { high: 3, medium: 2, low: 1 };
             filteredJobs.sort((a, b) => {
-                // Completed/Cancelled always drop to the bottom
                 const aDone = (a.status === 'complete' || a.status === 'cancelled') ? 1 : 0;
                 const bDone = (b.status === 'complete' || b.status === 'cancelled') ? 1 : 0;
                 if (aDone !== bDone) return aDone - bDone;
 
-                // Priority check
                 const pDiff = (priorityWeight[b.priority] || 2) - (priorityWeight[a.priority] || 2);
                 if (pDiff !== 0) return pDiff;
 
-                // Newest ID first
                 return b.id - a.id;
             });
 
@@ -795,6 +792,7 @@
 
             // Manager Controls on Cards
             if (currentUser.role === 'manager') {
+                html += `<button class="btn btn-secondary" onclick="openEditModal(${job.id})">Edit</button>`;
                 if (job.status !== 'cancelled' && job.status !== 'complete') {
                     html += `<button class="btn btn-danger" onclick="cancelJob(${job.id})">Cancel</button>`;
                 }
@@ -824,7 +822,6 @@
             if (job && job.assignedWorkers) {
                 job.assignedWorkers = job.assignedWorkers.filter(name => name !== currentUser.name);
                 
-                // If no one is assigned left, and it's not complete, revert back to pending
                 if (job.assignedWorkers.length === 0 && job.status !== 'complete' && job.status !== 'cancelled') {
                     job.status = 'pending';
                 }
@@ -895,7 +892,7 @@
             }
         }
 
-        // --- Job Modal & Fields ---
+        // --- Job Modal & Fields (Create & Edit) ---
         function toggleFieldSelect() {
             const type = document.getElementById('job-type').value;
             const fieldGroup = document.getElementById('field-select-group');
@@ -926,8 +923,38 @@
 
         function openCreateModal() {
             document.getElementById('job-form').reset();
+            document.getElementById('job-id').value = '';
+            document.getElementById('modal-title').textContent = 'Create New Job';
+            document.getElementById('modal-submit-btn').textContent = 'Save Job';
             document.getElementById('job-deadline-month').value = '';
             toggleFieldSelect();
+            document.getElementById('job-modal').style.display = 'flex';
+        }
+
+        function openEditModal(id) {
+            const job = jobs.find(j => j.id === id);
+            if (!job) return;
+
+            document.getElementById('job-form').reset();
+            document.getElementById('modal-title').textContent = 'Edit Job';
+            document.getElementById('modal-submit-btn').textContent = 'Update Job';
+
+            document.getElementById('job-id').value = job.id;
+            document.getElementById('job-title-input').value = job.title;
+            document.getElementById('job-type').value = job.type;
+            
+            toggleFieldSelect();
+            if (job.type === 'Fieldwork' && job.field) {
+                document.getElementById('job-field').value = job.field;
+            }
+
+            document.getElementById('job-equipment').value = job.equipment || '';
+            document.getElementById('job-equipment-status').value = job.equipmentStatus || '';
+            document.getElementById('job-deadline-month').value = job.deadlineMonth || '';
+            document.getElementById('job-priority').value = job.priority || 'medium';
+            document.getElementById('job-desc').value = job.desc || '';
+            document.getElementById('job-recurring').checked = !!job.recurring;
+
             document.getElementById('job-modal').style.display = 'flex';
         }
 
@@ -937,6 +964,7 @@
 
         function handleJobSubmit(e) {
             e.preventDefault();
+            const idInput = document.getElementById('job-id').value;
             const title = document.getElementById('job-title-input').value;
             const type = document.getElementById('job-type').value;
             const field = document.getElementById('job-field').value;
@@ -948,25 +976,42 @@
             const desc = document.getElementById('job-desc').value;
             const recurring = document.getElementById('job-recurring').checked;
 
-            const newJob = {
-                id: Date.now(),
-                title,
-                type,
-                field: type === 'Fieldwork' ? field : null,
-                equipment,
-                equipmentStatus,
-                deadlineMonth,
-                priority,
-                desc,
-                recurring,
-                status: 'pending',
-                month: currentMonth,
-                assignedWorkers: [],
-                swappedEquipment: '',
-                workerNotes: ''
-            };
+            if (idInput) {
+                // Editing existing job
+                const job = jobs.find(j => j.id == idInput);
+                if (job) {
+                    job.title = title;
+                    job.type = type;
+                    job.field = type === 'Fieldwork' ? field : null;
+                    job.equipment = equipment;
+                    job.equipmentStatus = equipmentStatus;
+                    job.deadlineMonth = deadlineMonth;
+                    job.priority = priority;
+                    job.desc = desc;
+                    job.recurring = recurring;
+                }
+            } else {
+                // Creating new job
+                const newJob = {
+                    id: Date.now(),
+                    title,
+                    type,
+                    field: type === 'Fieldwork' ? field : null,
+                    equipment,
+                    equipmentStatus,
+                    deadlineMonth,
+                    priority,
+                    desc,
+                    recurring,
+                    status: 'pending',
+                    month: currentMonth,
+                    assignedWorkers: [],
+                    swappedEquipment: '',
+                    workerNotes: ''
+                };
+                jobs.push(newJob);
+            }
 
-            jobs.push(newJob);
             saveJobs();
             closeModal();
             renderJobs();
