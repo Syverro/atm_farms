@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Farm Sim Job Tracker</title>
+    <style>
+        :root {
+            --primary: #770202;
+            --primary-hover: #590101;
+            --bg: #000000;
+            --card-bg: #121212;
+            --text-light: #FFFFFF;
+            --text-dim: #BBBBBB;
+            --border-color: #333333;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text-light);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        /* Login Modal */
+        #login-modal {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.92);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .login-box {
+            background: var(--card-bg);
+            border: 2px solid var(--primary);
+            padding: 30px;
+            border-radius: 8px;
+            width: 350px;
+            text-align: center;
+            box-shadow: 0 0 20px rgba(119, 2, 2, 0.4);
+        }
+
+        .login-box h2 {
+            margin-bottom: 20px;
+            color: var(--text-light);
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+            text-align: left;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+            color: var(--text-dim);
+        }
+
+        .input-group input, .input-group select, .input-group textarea {
+            width: 100%;
+            padding: 10px;
+            background: #1e1e1e;
+            border: 1px solid var(--border-color);
+            color: var(--text-light);
+            border-radius: 4px;
+        }
+
+        .input-group input:focus, .input-group select:focus, .input-group textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .btn {
+            background: var(--primary);
+            color: var(--text-light);
+            border: none;
+            padding: 10px 18px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background: var(--primary-hover);
+        }
+
+        .btn-secondary {
+            background: #333333;
+        }
+
+        .btn-secondary:hover {
+            background: #444444;
+        }
+
+        /* Header / Navbar */
+        header {
+            background: var(--primary);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
+
+        header h1 {
+            font-size: 22px;
+            letter-spacing: 1px;
+        }
+
+        .user-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        /* Main Dashboard */
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 0 20px;
+            flex-grow: 1;
+            width: 100%;
+        }
+
+        .manager-bar {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 10px;
+            border-bottom: 2px solid var(--border-color);
+            margin-bottom: 20px;
+        }
+
+        .tab-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            padding: 12px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: bold;
+            border-bottom: 3px solid transparent;
+        }
+
+        .tab-btn.active {
+            color: var(--text-light);
+            border-color: var(--primary);
+        }
+
+        /* Job Grid */
+        .job-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+        }
+
+        .job-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            position: relative;
+        }
+
+        .job-card.high-priority {
+            border-left: 5px solid #ff3333;
+        }
+        .job-card.medium-priority {
+            border-left: 5px solid #ffaa00;
+        }
+        .job-card.low-priority {
+            border-left: 5px solid #33cc33;
+        }
+
+        .job-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .job-title {
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .badge {
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 3px;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+
+        .badge-type { background: #333; color: #fff; }
+        .badge-priority { background: #222; }
+
+        .job-details {
+            font-size: 14px;
+            color: var(--text-dim);
+            line-height: 1.4;
+        }
+
+        .field-map-preview {
+            width: 100%;
+            height: 140px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            margin-top: 5px;
+        }
+
+        .job-actions {
+            margin-top: auto;
+            display: flex;
+            gap: 10px;
+            padding-top: 10px;
+        }
+
+        /* Modal Generic */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8);
+            align-items: center;
+            justify-content: center;
+            z-index: 500;
+        }
+
+        .modal-content {
+            background: var(--card-bg);
+            border: 1px solid var(--primary);
+            padding: 25px;
+            border-radius: 8px;
+            width: 500px;
+            max-width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .month-display {
+            font-weight: bold;
+            font-size: 18px;
+            color: var(--text-light);
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <!-- Login Modal -->
+    <div id="login-modal">
+        <div class="login-box">
+            <h2>Farm Sim Portal</h2>
+            <div class="input-group">
+                <label>Your Name</label>
+                <input type="text" id="login-name" placeholder="Enter username...">
+            </div>
+            <div class="input-group">
+                <label>Role</label>
+                <select id="login-role" onchange="toggleManagerKey()">
+                    <option value="worker">Farm Worker</option>
+                    <option value="manager">Farm Manager</option>
+                </select>
+            </div>
+            <div class="input-group hidden" id="manager-key-group">
+                <label>Manager Passcode (Default: farm123)</label>
+                <input type="password" id="login-key" placeholder="Enter passcode">
+            </div>
+            <button class="btn" style="width: 100%;" onclick="login()">Login</button>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header>
+        <h1>FS LOGISTICS HUB</h1>
+        <div class="user-controls">
+            <span class="month-display" id="current-month-display">Month 1</span>
+            <span id="user-display-name">Logged in as: Demo</span>
+            <button class="btn btn-secondary" onclick="logout()">Logout</button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="container">
+        <!-- Farm Manager Bar -->
+        <div id="manager-bar" class="manager-bar hidden">
+            <h3>Manager Controls</h3>
+            <div>
+                <button class="btn" onclick="openCreateModal()">+ Create New Job</button>
+                <button class="btn btn-secondary" onclick="advanceMonth()" title="Rolls over recurring jobs to the next month">Advance Month ➔</button>
+            </div>
+        </div>
+
+        <!-- Filter Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('pending', this)">Pending</button>
+            <button class="tab-btn" onclick="switchTab('in_progress', this)">In Progress</button>
+            <button class="tab-btn" onclick="switchTab('complete', this)">Completed</button>
+        </div>
+
+        <!-- Job Card Container -->
+        <div id="job-grid" class="job-grid">
+            <!-- Dynamic Job Cards inserted here -->
+        </div>
+    </div>
+
+    <!-- Create/Edit Job Modal -->
+    <div id="job-modal" class="modal">
+        <div class="modal-content">
+            <h2 id="modal-title" style="margin-bottom: 15px;">Create New Job</h2>
+            <form id="job-form" onsubmit="handleJobSubmit(event)">
+                <input type="hidden" id="job-id">
+                
+                <div class="input-group">
+                    <label>Job Title</label>
+                    <input type="text" id="job-title-input" required placeholder="e.g., Harvest Wheat Field 12">
+                </div>
+
+                <div class="input-group">
+                    <label>Job Type</label>
+                    <select id="job-type" onchange="toggleFieldSelect()">
+                        <option value="Fieldwork">Fieldwork</option>
+                        <option value="Animals">Animals</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+
+                <div class="input-group" id="field-select-group">
+                    <label>Field Number</label>
+                    <select id="job-field" onchange="handleFieldChange()">
+                        <!-- Javascript populates fields 1 to 60 -->
+                    </select>
+                </div>
+
+                <div class="input-group hidden" id="map-upload-group">
+                    <label>Upload/Update Field Map Image</label>
+                    <input type="file" id="field-map-input" accept="image/*" onchange="processMapUpload(event)">
+                </div>
+
+                <div class="input-group">
+                    <label>Priority</label>
+                    <select id="job-priority">
+                        <option value="low">Low</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="high">High</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label>Description & Notes</label>
+                    <textarea id="job-desc" rows="3" placeholder="Equipment needed, dropoff location, etc."></textarea>
+                </div>
+
+                <div class="input-group" style="display: flex; gap: 10px; align-items: center;">
+                    <input type="checkbox" id="job-recurring" style="width: auto;">
+                    <label for="job-recurring" style="margin: 0;">Recurring Job (Repeats Every Month)</label>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn">Save Job</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // --- State Management ---
+        let currentUser = null;
+        let currentTab = 'pending';
+        let currentMonth = parseInt(localStorage.getItem('fs_month')) || 1;
+        let jobs = JSON.parse(localStorage.getItem('fs_jobs')) || [];
+        let fieldMaps = JSON.parse(localStorage.getItem('fs_field_maps')) || {}; // { "field_1": "data:image..." }
+
+        const MANAGER_PASSCODE = "farm123";
+
+        // Initialize App
+        window.onload = function() {
+            populateFieldDropdown();
+            updateMonthDisplay();
+            checkSession();
+        };
+
+        function populateFieldDropdown() {
+            const select = document.getElementById('job-field');
+            select.innerHTML = '';
+            for(let i = 1; i <= 60; i++) {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.textContent = `Field ${i}`;
+                select.appendChild(opt);
+            }
+        }
+
+        // --- Authentication ---
+        function toggleManagerKey() {
+            const role = document.getElementById('login-role').value;
+            const keyGroup = document.getElementById('manager-key-group');
+            if (role === 'manager') {
+                keyGroup.classList.remove('hidden');
+            } else {
+                keyGroup.classList.add('hidden');
+            }
+        }
+
+        function login() {
+            const name = document.getElementById('login-name').value.trim();
+            const role = document.getElementById('login-role').value;
+            const key = document.getElementById('login-key').value;
+
+            if (!name) return alert("Please enter your name.");
+
+            if (role === 'manager' && key !== MANAGER_PASSCODE) {
+                return alert("Incorrect Manager Passcode!");
+            }
+
+            currentUser = { name, role };
+            localStorage.setItem('fs_user', JSON.stringify(currentUser));
+            
+            document.getElementById('login-modal').classList.add('hidden');
+            setupUIForRole();
+            renderJobs();
+        }
+
+        function checkSession() {
+            const savedUser = localStorage.getItem('fs_user');
+            if (savedUser) {
+                currentUser = JSON.parse(savedUser);
+                document.getElementById('login-modal').classList.add('hidden');
+                setupUIForRole();
+                renderJobs();
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('fs_user');
+            currentUser = null;
+            document.getElementById('login-modal').classList.remove('hidden');
+        }
+
+        function setupUIForRole() {
+            document.getElementById('user-display-name').textContent = `${currentUser.name} (${currentUser.role})`;
+            if (currentUser.role === 'manager') {
+                document.getElementById('manager-bar').classList.remove('hidden');
+            } else {
+                document.getElementById('manager-bar').classList.add('hidden');
+            }
+        }
+
+        // --- Month Management ---
+        function updateMonthDisplay() {
+            document.getElementById('current-month-display').textContent = `Month ${currentMonth}`;
+            localStorage.setItem('fs_month', currentMonth);
+        }
+
+        function advanceMonth() {
+            if (confirm("Are you sure you want to advance to the next month? Recurring jobs will be duplicated for the new month.")) {
+                currentMonth++;
+                updateMonthDisplay();
+
+                // Roll over recurring jobs
+                const recurringJobs = jobs.filter(j => j.recurring && j.month === currentMonth - 1);
+                recurringJobs.forEach(job => {
+                    const newJob = { ...job, id: Date.now() + Math.random(), status: 'pending', month: currentMonth, assignedTo: null };
+                    jobs.push(newJob);
+                });
+
+                saveJobs();
+                renderJobs();
+            }
+        }
+
+        // --- Job Logic & Render ---
+        function switchTab(tab, element) {
+            currentTab = tab;
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            element.classList.add('active');
+            renderJobs();
+        }
+
+        function saveJobs() {
+            localStorage.setItem('fs_jobs', JSON.stringify(jobs));
+        }
+
+        function renderJobs() {
+            const grid = document.getElementById('job-grid');
+            grid.innerHTML = '';
+
+            const filteredJobs = jobs.filter(j => j.status === currentTab && j.month === currentMonth);
+
+            if (filteredJobs.length === 0) {
+                grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-dim); padding: 40px;">No jobs in this category for Month ${currentMonth}.</div>`;
+                return;
+            }
+
+            filteredJobs.forEach(job => {
+                const card = document.createElement('div');
+                card.className = `job-card ${job.priority}-priority`;
+
+                let mapImageHTML = '';
+                if (job.type === 'Fieldwork' && fieldMaps[`field_${job.field}`]) {
+                    mapImageHTML = `<img src="${fieldMaps[`field_${job.field}`]}" class="field-map-preview" alt="Field Map">`;
+                }
+
+                card.innerHTML = `
+                    <div class="job-header">
+                        <span class="job-title">${job.title}</span>
+                        <span class="badge badge-priority">${job.priority}</span>
+                    </div>
+                    <div style="display: flex; gap: 5px; margin-top: 4px;">
+                        <span class="badge badge-type">${job.type} ${job.type === 'Fieldwork' ? '- Field ' + job.field : ''}</span>
+                        ${job.recurring ? '<span class="badge" style="background:#770202;">Recurring</span>' : ''}
+                    </div>
+                    <div class="job-details" style="margin-top: 10px;">
+                        ${job.desc ? `<p><strong>Notes:</strong> ${job.desc}</p>` : ''}
+                        <p style="margin-top: 5px;"><strong>Assigned:</strong> ${job.assignedTo || 'Unassigned'}</p>
+                    </div>
+                    ${mapImageHTML}
+                    <div class="job-actions">
+                        ${getActionButton(job)}
+                        ${currentUser.role === 'manager' ? `<button class="btn btn-secondary" onclick="deleteJob(${job.id})">Delete</button>` : ''}
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function getActionButton(job) {
+            if (job.status === 'pending') {
+                return `<button class="btn" style="flex-grow:1;" onclick="updateJobStatus(${job.id}, 'in_progress')">Claim / Start</button>`;
+            } else if (job.status === 'in_progress') {
+                return `<button class="btn" style="flex-grow:1; background: #28a745;" onclick="updateJobStatus(${job.id}, 'complete')">Mark Complete</button>`;
+            } else {
+                return `<button class="btn btn-secondary" style="flex-grow:1;" onclick="updateJobStatus(${job.id}, 'in_progress')">Reopen</button>`;
+            }
+        }
+
+        function updateJobStatus(id, newStatus) {
+            const job = jobs.find(j => j.id === id);
+            if (job) {
+                job.status = newStatus;
+                if (newStatus === 'in_progress' && !job.assignedTo) {
+                    job.assignedTo = currentUser.name;
+                }
+                saveJobs();
+                renderJobs();
+            }
+        }
+
+        function deleteJob(id) {
+            if (confirm("Delete this job?")) {
+                jobs = jobs.filter(j => j.id !== id);
+                saveJobs();
+                renderJobs();
+            }
+        }
+
+        // --- Job Modal & Fields ---
+        function toggleFieldSelect() {
+            const type = document.getElementById('job-type').value;
+            const fieldGroup = document.getElementById('field-select-group');
+            const mapGroup = document.getElementById('map-upload-group');
+            
+            if (type === 'Fieldwork') {
+                fieldGroup.classList.remove('hidden');
+                mapGroup.classList.remove('hidden');
+            } else {
+                fieldGroup.classList.add('hidden');
+                mapGroup.classList.add('hidden');
+            }
+        }
+
+        function handleFieldChange() {
+            // Optional: Action when field changes
+        }
+
+        function processMapUpload(event) {
+            const file = event.target.files[0];
+            const fieldNum = document.getElementById('job-field').value;
+            if (file && fieldNum) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    fieldMaps[`field_${fieldNum}`] = e.target.result;
+                    localStorage.setItem('fs_field_maps', JSON.stringify(fieldMaps));
+                    alert(`Map updated for Field ${fieldNum}`);
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function openCreateModal() {
+            document.getElementById('job-form').reset();
+            toggleFieldSelect();
+            document.getElementById('job-modal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('job-modal').style.display = 'none';
+        }
+
+        function handleJobSubmit(e) {
+            e.preventDefault();
+            const title = document.getElementById('job-title-input').value;
+            const type = document.getElementById('job-type').value;
+            const field = document.getElementById('job-field').value;
+            const priority = document.getElementById('job-priority').value;
+            const desc = document.getElementById('job-desc').value;
+            const recurring = document.getElementById('job-recurring').checked;
+
+            const newJob = {
+                id: Date.now(),
+                title,
+                type,
+                field: type === 'Fieldwork' ? field : null,
+                priority,
+                desc,
+                recurring,
+                status: 'pending',
+                month: currentMonth,
+                assignedTo: null
+            };
+
+            jobs.push(newJob);
+            saveJobs();
+            closeModal();
+            renderJobs();
+        }
+    </script>
+</body>
+</html>
