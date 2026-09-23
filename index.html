@@ -483,7 +483,7 @@
 
     <!-- Footer -->
     <footer>
-        At The Mile Farms Portal &bull; Version 1.8.1 &bull; Build 2026.09.24
+        At The Mile Farms Portal &bull; Version 1.8.2 &bull; Build 2026.09.24
     </footer>
 
     <script>
@@ -603,7 +603,8 @@
                         deadlineMonth: job.deadlineMonth ? job.deadlineMonth + 1 : null,
                         assignedWorkers: [],
                         workerNotes: '',
-                        swappedEquipment: ''
+                        swappedEquipment: '',
+                        completedAt: null
                     };
                     jobs.push(newJob);
                 });
@@ -684,16 +685,37 @@
                 return matchesStatus && matchesSearch && matchesType;
             });
 
-            // Sort by Urgency / Newest (Priority rank: high > medium > low, then newest ID/timestamp first)
+            // --- Custom Sorting Logic ---
+            // Group rank: 
+            // 1st: in_progress
+            // 2nd: pending
+            // 3rd: complete
+            // 4th: cancelled
+            const statusGroupRank = { in_progress: 1, pending: 2, complete: 3, cancelled: 4 };
             const priorityWeight = { high: 3, medium: 2, low: 1 };
+
             filteredJobs.sort((a, b) => {
-                const aDone = (a.status === 'complete' || a.status === 'cancelled') ? 1 : 0;
-                const bDone = (b.status === 'complete' || b.status === 'cancelled') ? 1 : 0;
-                if (aDone !== bDone) return aDone - bDone;
+                const rankA = statusGroupRank[a.status] || 99;
+                const rankB = statusGroupRank[b.status] || 99;
 
-                const pDiff = (priorityWeight[b.priority] || 2) - (priorityWeight[a.priority] || 2);
-                if (pDiff !== 0) return pDiff;
+                if (rankA !== rankB) {
+                    return rankA - rankB;
+                }
 
+                // If both are Pending or In Progress, sort by priority (High > Medium > Low)
+                if ((a.status === 'pending' || a.status === 'in_progress') && (b.status === 'pending' || b.status === 'in_progress')) {
+                    const pDiff = (priorityWeight[b.priority] || 2) - (priorityWeight[a.priority] || 2);
+                    if (pDiff !== 0) return pDiff;
+                }
+
+                // If both are Completed, sort by latest completed at the top (highest completedAt or ID first)
+                if (a.status === 'complete' && b.status === 'complete') {
+                    const timeA = a.completedAt || a.id;
+                    const timeB = b.completedAt || b.id;
+                    return timeB - timeA; // Latest first
+                }
+
+                // Default fallback: newest created/ID first
                 return b.id - a.id;
             });
 
@@ -788,12 +810,10 @@
                     html += `<button class="btn btn-secondary" onclick="openNoteModal(${job.id})">Add Note</button>`;
                 }
             } else if (job.status === 'complete') {
-                // Reopen rule: Only assigned workers or management can reopen complete jobs
                 if (isAssignedToMe || isManager) {
                     html += `<button class="btn btn-secondary" onclick="updateJobStatus(${job.id}, 'in_progress')">Reopen Job</button>`;
                 }
             } else {
-                // Cancelled jobs can be reopened by managers
                 if (isManager) {
                     html += `<button class="btn btn-secondary" onclick="updateJobStatus(${job.id}, 'in_progress')">Reopen Job</button>`;
                 }
@@ -844,8 +864,13 @@
             const job = jobs.find(j => j.id === id);
             if (job) {
                 job.status = newStatus;
-                if (newStatus === 'in_progress' && (!job.assignedWorkers || job.assignedWorkers.length === 0)) {
-                    job.assignedWorkers = [currentUser.name];
+                if (newStatus === 'complete') {
+                    job.completedAt = Date.now();
+                } else if (newStatus === 'in_progress') {
+                    job.completedAt = null;
+                    if (!job.assignedWorkers || job.assignedWorkers.length === 0) {
+                        job.assignedWorkers = [currentUser.name];
+                    }
                 }
                 saveJobs();
                 renderJobs();
@@ -1016,7 +1041,8 @@
                     month: currentMonth,
                     assignedWorkers: [],
                     swappedEquipment: '',
-                    workerNotes: ''
+                    workerNotes: '',
+                    completedAt: null
                 };
                 jobs.push(newJob);
             }
