@@ -114,6 +114,13 @@
             background: #800000;
         }
 
+        .btn-warning {
+            background: #b8860b;
+        }
+        .btn-warning:hover {
+            background: #996515;
+        }
+
         /* Header / Navbar */
         header {
             background: var(--primary);
@@ -497,7 +504,7 @@
 
     <!-- Footer -->
     <footer>
-        At The Mile Farms Portal &bull; Version 1.5.0 &bull; Build 2026.09.24
+        At The Mile Farms Portal &bull; Version 1.6.0 &bull; Build 2026.09.24
     </footer>
 
     <script>
@@ -583,6 +590,7 @@
             localStorage.removeItem('fs_user');
             currentUser = null;
             document.getElementById('login-modal').classList.add('hidden');
+            document.getElementById('login-modal').style.display = 'flex';
         }
 
         function setupUIForRole() {
@@ -613,7 +621,7 @@
                         status: 'pending', 
                         month: currentMonth, 
                         deadlineMonth: job.deadlineMonth ? job.deadlineMonth + 1 : currentMonth,
-                        assignedTo: null,
+                        assignedWorkers: [],
                         workerNotes: '',
                         swappedEquipment: ''
                     };
@@ -647,7 +655,17 @@
             reader.onload = function(e) {
                 try {
                     const imported = JSON.parse(e.target.result);
-                    if (imported.jobs) jobs = imported.jobs;
+                    if (imported.jobs) {
+                        // Migrate legacy single assignedTo to assignedWorkers array if needed
+                        jobs = imported.jobs.map(j => {
+                            if (!j.assignedWorkers && j.assignedTo) {
+                                j.assignedWorkers = [j.assignedTo];
+                            } else if (!j.assignedWorkers) {
+                                j.assignedWorkers = [];
+                            }
+                            return j;
+                        });
+                    }
                     if (imported.fieldMaps) fieldMaps = imported.fieldMaps;
                     if (imported.month) currentMonth = imported.month;
 
@@ -683,6 +701,11 @@
             const filterType = document.getElementById('filter-type').value;
 
             const filteredJobs = jobs.filter(j => {
+                // Ensure legacy items have assignedWorkers array
+                if (!j.assignedWorkers) {
+                    j.assignedWorkers = j.assignedTo ? [j.assignedTo] : [];
+                }
+
                 let matchesTab = false;
                 if (currentTab === 'complete') {
                     matchesTab = j.status === 'complete' || j.status === 'cancelled';
@@ -729,6 +752,10 @@
                     `;
                 }
 
+                const workersList = job.assignedWorkers && job.assignedWorkers.length > 0 
+                    ? job.assignedWorkers.join(', ') 
+                    : 'Unassigned';
+
                 card.innerHTML = `
                     <div class="job-header">
                         <span class="job-title">${job.title}</span>
@@ -747,7 +774,7 @@
                         ${job.equipment ? `<p><strong>Required Equipment:</strong> ${job.equipment}</p>` : ''}
                         ${job.equipmentStatus ? `<p><strong>Equipment Status:</strong> <span style="color: #ffaa00;">${job.equipmentStatus}</span></p>` : ''}
                         ${job.desc ? `<p><strong>Notes:</strong> ${job.desc}</p>` : ''}
-                        <p style="margin-top: 5px;"><strong>Assigned:</strong> ${job.assignedTo || 'Unassigned'}</p>
+                        <p style="margin-top: 5px;"><strong>Assigned Team:</strong> ${workersList}</p>
                     </div>
                     ${notesSectionHTML}
                     ${mapImageHTML}
@@ -761,20 +788,29 @@
 
         function getActionButtons(job) {
             let html = '';
-            
-            if (job.status === 'pending') {
-                html += `<button class="btn" style="flex-grow:1;" onclick="updateJobStatus(${job.id}, 'in_progress')">Claim / Start</button>`;
-            } else if (job.status === 'in_progress') {
-                html += `<button class="btn" style="flex-grow:1; background: #28a745;" onclick="updateJobStatus(${job.id}, 'complete')">Mark Complete</button>`;
-                html += `<button class="btn btn-secondary" onclick="openNoteModal(${job.id})">Add Note / Swap</button>`;
+            const isAssignedToMe = job.assignedWorkers && job.assignedWorkers.includes(currentUser.name);
+
+            if (job.status !== 'complete' && job.status !== 'cancelled') {
+                if (!isAssignedToMe) {
+                    html += `<button class="btn" onclick="assignUser(${job.id})">Assign / Join Job</button>`;
+                } else {
+                    html += `<button class="btn btn-warning" onclick="unassignUser(${job.id})">Unassign Me</button>`;
+                }
+
+                if (job.status === 'pending') {
+                    html += `<button class="btn btn-secondary" onclick="updateJobStatus(${job.id}, 'in_progress')">Set In Progress</button>`;
+                } else if (job.status === 'in_progress') {
+                    html += `<button class="btn" style="background: #28a745;" onclick="updateJobStatus(${job.id}, 'complete')">Mark Complete</button>`;
+                    html += `<button class="btn btn-secondary" onclick="openNoteModal(${job.id})">Add Note</button>`;
+                }
             } else {
-                html += `<button class="btn btn-secondary" style="flex-grow:1;" onclick="updateJobStatus(${job.id}, 'in_progress')">Reopen</button>`;
+                html += `<button class="btn btn-secondary" onclick="updateJobStatus(${job.id}, 'in_progress')">Reopen</button>`;
             }
 
             // Manager Controls on Cards
             if (currentUser.role === 'manager') {
                 if (job.status !== 'cancelled' && job.status !== 'complete') {
-                    html += `<button class="btn btn-danger" onclick="cancelJob(${job.id})">Cancel Job</button>`;
+                    html += `<button class="btn btn-danger" onclick="cancelJob(${job.id})">Cancel</button>`;
                 }
                 html += `<button class="btn btn-secondary" onclick="deleteJob(${job.id})">Delete</button>`;
             }
@@ -782,12 +818,37 @@
             return html;
         }
 
+        function assignUser(id) {
+            const job = jobs.find(j => j.id === id);
+            if (job) {
+                if (!job.assignedWorkers) job.assignedWorkers = [];
+                if (!job.assignedWorkers.includes(currentUser.name)) {
+                    job.assignedWorkers.push(currentUser.name);
+                }
+                if (job.status === 'pending') {
+                    job.status = 'in_progress';
+                }
+                saveJobs();
+                renderJobs();
+            }
+        }
+
+        function unassignUser(id) {
+            const job = jobs.find(j => j.id === id);
+            if (job && job.assignedWorkers) {
+                job.assignedWorkers = job.assignedWorkers.filter(name => name !== currentUser.name);
+                saveJobs();
+                renderJobs();
+            }
+        }
+
         function updateJobStatus(id, newStatus) {
             const job = jobs.find(j => j.id === id);
             if (job) {
                 job.status = newStatus;
-                if (newStatus === 'in_progress' && !job.assignedTo) {
-                    job.assignedTo = currentUser.name;
+                // If starting/reopening and no one is assigned, assign current user automatically
+                if (newStatus === 'in_progress' && (!job.assignedWorkers || job.assignedWorkers.length === 0)) {
+                    job.assignedWorkers = [currentUser.name];
                 }
                 saveJobs();
                 renderJobs();
@@ -909,7 +970,7 @@
                 recurring,
                 status: 'pending',
                 month: currentMonth,
-                assignedTo: null,
+                assignedWorkers: [],
                 swappedEquipment: '',
                 workerNotes: ''
             };
