@@ -483,7 +483,7 @@
 
     <!-- Footer -->
     <footer>
-        At The Mile Farms Portal &bull; Version 1.8.0 &bull; Build 2026.09.24
+        At The Mile Farms Portal &bull; Version 1.8.1 &bull; Build 2026.09.24
     </footer>
 
     <script>
@@ -772,6 +772,7 @@
         function getActionButtons(job) {
             let html = '';
             const isAssignedToMe = job.assignedWorkers && job.assignedWorkers.includes(currentUser.name);
+            const isManager = currentUser.role === 'manager';
 
             if (job.status !== 'complete' && job.status !== 'cancelled') {
                 if (!isAssignedToMe) {
@@ -786,12 +787,20 @@
                     html += `<button class="btn" style="background: #28a745;" onclick="updateJobStatus(${job.id}, 'complete')">Mark Complete</button>`;
                     html += `<button class="btn btn-secondary" onclick="openNoteModal(${job.id})">Add Note</button>`;
                 }
+            } else if (job.status === 'complete') {
+                // Reopen rule: Only assigned workers or management can reopen complete jobs
+                if (isAssignedToMe || isManager) {
+                    html += `<button class="btn btn-secondary" onclick="updateJobStatus(${job.id}, 'in_progress')">Reopen Job</button>`;
+                }
             } else {
-                html += `<button class="btn btn-secondary" onclick="updateJobStatus(${job.id}, 'in_progress')">Reopen</button>`;
+                // Cancelled jobs can be reopened by managers
+                if (isManager) {
+                    html += `<button class="btn btn-secondary" onclick="updateJobStatus(${job.id}, 'in_progress')">Reopen Job</button>`;
+                }
             }
 
             // Manager Controls on Cards
-            if (currentUser.role === 'manager') {
+            if (isManager) {
                 html += `<button class="btn btn-secondary" onclick="openEditModal(${job.id})">Edit</button>`;
                 if (job.status !== 'cancelled' && job.status !== 'complete') {
                     html += `<button class="btn btn-danger" onclick="cancelJob(${job.id})">Cancel</button>`;
