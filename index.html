@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Farm Sim Job Tracker</title>
+    <title>At The Mile Farms Portal</title>
     <style>
         :root {
             --primary: #770202;
@@ -46,7 +46,7 @@
             border: 2px solid var(--primary);
             padding: 30px;
             border-radius: 8px;
-            width: 350px;
+            width: 380px;
             text-align: center;
             box-shadow: 0 0 20px rgba(119, 2, 2, 0.4);
         }
@@ -54,6 +54,7 @@
         .login-box h2 {
             margin-bottom: 20px;
             color: var(--text-light);
+            font-size: 20px;
         }
 
         .input-group {
@@ -270,6 +271,17 @@
             color: var(--text-light);
         }
 
+        /* Footer */
+        footer {
+            background: #0a0a0a;
+            border-top: 1px solid var(--border-color);
+            padding: 15px 30px;
+            text-align: center;
+            font-size: 13px;
+            color: var(--text-dim);
+            margin-top: auto;
+        }
+
         .hidden { display: none !important; }
     </style>
 </head>
@@ -278,7 +290,7 @@
     <!-- Login Modal -->
     <div id="login-modal">
         <div class="login-box">
-            <h2>Farm Sim Portal</h2>
+            <h2>AT THE MILE FARMS PORTAL</h2>
             <div class="input-group">
                 <label>Your Name</label>
                 <input type="text" id="login-name" placeholder="Enter username...">
@@ -291,7 +303,7 @@
                 </select>
             </div>
             <div class="input-group hidden" id="manager-key-group">
-                <label>Manager Passcode (Default: farm123)</label>
+                <label>Manager Passcode</label>
                 <input type="password" id="login-key" placeholder="Enter passcode">
             </div>
             <button class="btn" style="width: 100%;" onclick="login()">Login</button>
@@ -300,7 +312,7 @@
 
     <!-- Header -->
     <header>
-        <h1>FS LOGISTICS HUB</h1>
+        <h1>AT THE MILE FARMS PORTAL</h1>
         <div class="user-controls">
             <span class="month-display" id="current-month-display">Month 1</span>
             <span id="user-display-name">Logged in as: Demo</span>
@@ -355,9 +367,19 @@
 
                 <div class="input-group" id="field-select-group">
                     <label>Field Number</label>
-                    <select id="job-field" onchange="handleFieldChange()">
+                    <select id="job-field">
                         <!-- Javascript populates fields 1 to 60 -->
                     </select>
+                </div>
+
+                <div class="input-group">
+                    <label>Required Equipment / Machinery</label>
+                    <input type="text" id="job-equipment" placeholder="e.g., Medium Tractor + 6m Cultivator">
+                </div>
+
+                <div class="input-group">
+                    <label>Deadline Date</label>
+                    <input type="date" id="job-deadline" required onchange="autoSetPriorityByDeadline()">
                 </div>
 
                 <div class="input-group hidden" id="map-upload-group">
@@ -366,11 +388,11 @@
                 </div>
 
                 <div class="input-group">
-                    <label>Priority</label>
+                    <label>Priority (Auto-assigned by deadline, but can be manually changed)</label>
                     <select id="job-priority">
                         <option value="low">Low</option>
                         <option value="medium" selected>Medium</option>
-                        <option value="high">High</option>
+                        <option value="high">High (Urgent)</option>
                     </select>
                 </div>
 
@@ -392,15 +414,18 @@
         </div>
     </div>
 
+    <!-- Footer -->
+    <footer>
+        At The Mile Farms Portal &bull; Version 1.2.0 &bull; Build 2026.09.23
+    </footer>
+
     <script>
         // --- State Management ---
         let currentUser = null;
         let currentTab = 'pending';
         let currentMonth = parseInt(localStorage.getItem('fs_month')) || 1;
         let jobs = JSON.parse(localStorage.getItem('fs_jobs')) || [];
-        let fieldMaps = JSON.parse(localStorage.getItem('fs_field_maps')) || {}; // { "field_1": "data:image..." }
-
-        const MANAGER_PASSCODE = "farm123";
+        let fieldMaps = JSON.parse(localStorage.getItem('fs_field_maps')) || {};
 
         // Initialize App
         window.onload = function() {
@@ -420,6 +445,27 @@
             }
         }
 
+        // --- Deadline & Priority Auto-assignment ---
+        function autoSetPriorityByDeadline() {
+            const deadlineVal = document.getElementById('job-deadline').value;
+            if (!deadlineVal) return;
+
+            const deadlineDate = new Date(deadlineVal);
+            const today = new Date();
+
+            const isSameMonthAndYear = (
+                deadlineDate.getMonth() === today.getMonth() &&
+                deadlineDate.getFullYear() === today.getFullYear()
+            );
+
+            const prioritySelect = document.getElementById('job-priority');
+            if (isSameMonthAndYear || deadlineDate <= today) {
+                prioritySelect.value = 'high';
+            } else {
+                prioritySelect.value = 'medium';
+            }
+        }
+
         // --- Authentication ---
         function toggleManagerKey() {
             const role = document.getElementById('login-role').value;
@@ -434,11 +480,11 @@
         function login() {
             const name = document.getElementById('login-name').value.trim();
             const role = document.getElementById('login-role').value;
-            const key = document.getElementById('login-key').value;
+            const key = document.getElementById('login-key').value.trim();
 
             if (!name) return alert("Please enter your name.");
 
-            if (role === 'manager' && key !== MANAGER_PASSCODE) {
+            if (role === 'manager' && key !== name) {
                 return alert("Incorrect Manager Passcode!");
             }
 
@@ -486,7 +532,6 @@
                 currentMonth++;
                 updateMonthDisplay();
 
-                // Roll over recurring jobs
                 const recurringJobs = jobs.filter(j => j.recurring && j.month === currentMonth - 1);
                 recurringJobs.forEach(job => {
                     const newJob = { ...job, id: Date.now() + Math.random(), status: 'pending', month: currentMonth, assignedTo: null };
@@ -535,11 +580,13 @@
                         <span class="job-title">${job.title}</span>
                         <span class="badge badge-priority">${job.priority}</span>
                     </div>
-                    <div style="display: flex; gap: 5px; margin-top: 4px;">
+                    <div style="display: flex; gap: 5px; margin-top: 4px; flex-wrap: wrap;">
                         <span class="badge badge-type">${job.type} ${job.type === 'Fieldwork' ? '- Field ' + job.field : ''}</span>
                         ${job.recurring ? '<span class="badge" style="background:#770202;">Recurring</span>' : ''}
                     </div>
                     <div class="job-details" style="margin-top: 10px;">
+                        ${job.deadline ? `<p><strong>Deadline:</strong> ${job.deadline}</p>` : ''}
+                        ${job.equipment ? `<p><strong>Equipment:</strong> ${job.equipment}</p>` : ''}
                         ${job.desc ? `<p><strong>Notes:</strong> ${job.desc}</p>` : ''}
                         <p style="margin-top: 5px;"><strong>Assigned:</strong> ${job.assignedTo || 'Unassigned'}</p>
                     </div>
@@ -598,10 +645,6 @@
             }
         }
 
-        function handleFieldChange() {
-            // Optional: Action when field changes
-        }
-
         function processMapUpload(event) {
             const file = event.target.files[0];
             const fieldNum = document.getElementById('job-field').value;
@@ -631,6 +674,8 @@
             const title = document.getElementById('job-title-input').value;
             const type = document.getElementById('job-type').value;
             const field = document.getElementById('job-field').value;
+            const equipment = document.getElementById('job-equipment').value;
+            const deadline = document.getElementById('job-deadline').value;
             const priority = document.getElementById('job-priority').value;
             const desc = document.getElementById('job-desc').value;
             const recurring = document.getElementById('job-recurring').checked;
@@ -640,6 +685,8 @@
                 title,
                 type,
                 field: type === 'Fieldwork' ? field : null,
+                equipment,
+                deadline,
                 priority,
                 desc,
                 recurring,
