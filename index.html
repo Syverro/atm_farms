@@ -185,30 +185,6 @@
             border-radius: 4px;
         }
 
-        /* Tabs */
-        .tabs {
-            display: flex;
-            gap: 10px;
-            border-bottom: 2px solid var(--border-color);
-            margin-bottom: 20px;
-        }
-
-        .tab-btn {
-            background: transparent;
-            border: none;
-            color: var(--text-dim);
-            padding: 12px 20px;
-            font-size: 16px;
-            cursor: pointer;
-            font-weight: bold;
-            border-bottom: 3px solid transparent;
-        }
-
-        .tab-btn.active {
-            color: var(--text-light);
-            border-color: var(--primary);
-        }
-
         /* Job Grid */
         .job-grid {
             display: grid;
@@ -254,6 +230,9 @@
         .badge-priority { background: #222; }
         .badge-overdue { background: #b30000; color: #fff; }
         .badge-cancelled { background: #666; color: #fff; }
+        .badge-pending { background: #555; color: #fff; }
+        .badge-progress { background: #17a2b8; color: #fff; }
+        .badge-complete { background: #28a745; color: #fff; }
 
         .job-details {
             font-size: 14px;
@@ -381,19 +360,19 @@
         <!-- Filter & Search Bar -->
         <div class="filter-bar">
             <input type="text" id="search-input" placeholder="Search jobs or field #..." oninput="renderJobs()" style="flex-grow: 1;">
+            <select id="filter-status" onchange="renderJobs()">
+                <option value="all">All Statuses</option>
+                <option value="pending">Pending</option>
+                <option value="in_progress">In Progress</option>
+                <option value="complete">Completed</option>
+                <option value="cancelled">Cancelled</option>
+            </select>
             <select id="filter-type" onchange="renderJobs()">
                 <option value="all">All Job Types</option>
                 <option value="Fieldwork">Fieldwork</option>
                 <option value="Animals">Animals</option>
                 <option value="Other">Other</option>
             </select>
-        </div>
-
-        <!-- Filter Tabs -->
-        <div class="tabs">
-            <button class="tab-btn active" onclick="switchTab('pending', this)">Pending</button>
-            <button class="tab-btn" onclick="switchTab('in_progress', this)">In Progress</button>
-            <button class="tab-btn" onclick="switchTab('complete', this)">Completed / Cancelled</button>
         </div>
 
         <!-- Job Card Container -->
@@ -441,8 +420,8 @@
                 </div>
 
                 <div class="input-group">
-                    <label>Deadline In-Game Month (Number)</label>
-                    <input type="number" id="job-deadline-month" min="1" required oninput="autoSetPriorityByDeadline()">
+                    <label>Deadline In-Game Month (Optional)</label>
+                    <input type="number" id="job-deadline-month" min="1" placeholder="Leave blank if no deadline" oninput="autoSetPriorityByDeadline()">
                 </div>
 
                 <div class="input-group hidden" id="map-upload-group">
@@ -504,13 +483,12 @@
 
     <!-- Footer -->
     <footer>
-        At The Mile Farms Portal &bull; Version 1.6.0 &bull; Build 2026.09.24
+        At The Mile Farms Portal &bull; Version 1.7.0 &bull; Build 2026.09.24
     </footer>
 
     <script>
         // --- State Management ---
         let currentUser = null;
-        let currentTab = 'pending';
         let currentMonth = parseInt(localStorage.getItem('fs_month')) || 1;
         let jobs = JSON.parse(localStorage.getItem('fs_jobs')) || [];
         let fieldMaps = JSON.parse(localStorage.getItem('fs_field_maps')) || {};
@@ -535,7 +513,9 @@
 
         // --- Deadline & Priority Auto-assignment ---
         function autoSetPriorityByDeadline() {
-            const deadlineMonthInput = parseInt(document.getElementById('job-deadline-month').value);
+            const val = document.getElementById('job-deadline-month').value;
+            if (!val) return;
+            const deadlineMonthInput = parseInt(val);
             if (isNaN(deadlineMonthInput)) return;
 
             const prioritySelect = document.getElementById('job-priority');
@@ -620,7 +600,7 @@
                         id: Date.now() + Math.random(), 
                         status: 'pending', 
                         month: currentMonth, 
-                        deadlineMonth: job.deadlineMonth ? job.deadlineMonth + 1 : currentMonth,
+                        deadlineMonth: job.deadlineMonth ? job.deadlineMonth + 1 : null,
                         assignedWorkers: [],
                         workerNotes: '',
                         swappedEquipment: ''
@@ -656,7 +636,6 @@
                 try {
                     const imported = JSON.parse(e.target.result);
                     if (imported.jobs) {
-                        // Migrate legacy single assignedTo to assignedWorkers array if needed
                         jobs = imported.jobs.map(j => {
                             if (!j.assignedWorkers && j.assignedTo) {
                                 j.assignedWorkers = [j.assignedTo];
@@ -682,13 +661,6 @@
         }
 
         // --- Job Logic & Render ---
-        function switchTab(tab, element) {
-            currentTab = tab;
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            element.classList.add('active');
-            renderJobs();
-        }
-
         function saveJobs() {
             localStorage.setItem('fs_jobs', JSON.stringify(jobs));
         }
@@ -698,29 +670,38 @@
             grid.innerHTML = '';
 
             const searchQuery = document.getElementById('search-input').value.toLowerCase();
+            const filterStatus = document.getElementById('filter-status').value;
             const filterType = document.getElementById('filter-type').value;
 
             const filteredJobs = jobs.filter(j => {
-                // Ensure legacy items have assignedWorkers array
                 if (!j.assignedWorkers) {
                     j.assignedWorkers = j.assignedTo ? [j.assignedTo] : [];
                 }
 
-                let matchesTab = false;
-                if (currentTab === 'complete') {
-                    matchesTab = j.status === 'complete' || j.status === 'cancelled';
-                } else {
-                    matchesTab = j.status === currentTab;
-                }
-
-                const matchesMonth = j.month === currentMonth;
+                const matchesStatus = filterStatus === 'all' || j.status === filterStatus;
                 const matchesSearch = j.title.toLowerCase().includes(searchQuery) || (j.field && j.field.toString().includes(searchQuery));
                 const matchesType = filterType === 'all' || j.type === filterType;
-                return matchesTab && matchesMonth && matchesSearch && matchesType;
+                return matchesStatus && matchesSearch && matchesType;
+            });
+
+            // Sort by Urgency / Newest (Priority rank: high > medium > low, then newest ID/timestamp first)
+            const priorityWeight = { high: 3, medium: 2, low: 1 };
+            filteredJobs.sort((a, b) => {
+                // Completed/Cancelled always drop to the bottom
+                const aDone = (a.status === 'complete' || a.status === 'cancelled') ? 1 : 0;
+                const bDone = (b.status === 'complete' || b.status === 'cancelled') ? 1 : 0;
+                if (aDone !== bDone) return aDone - bDone;
+
+                // Priority check
+                const pDiff = (priorityWeight[b.priority] || 2) - (priorityWeight[a.priority] || 2);
+                if (pDiff !== 0) return pDiff;
+
+                // Newest ID first
+                return b.id - a.id;
             });
 
             if (filteredJobs.length === 0) {
-                grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-dim); padding: 40px;">No jobs match your filter for Month ${currentMonth}.</div>`;
+                grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-dim); padding: 40px;">No jobs match your filter criteria.</div>`;
                 return;
             }
 
@@ -739,7 +720,11 @@
                 if (job.status === 'cancelled') {
                     statusBadgeHTML = `<span class="badge badge-cancelled">Cancelled</span>`;
                 } else if (job.status === 'complete') {
-                    statusBadgeHTML = `<span class="badge" style="background:#28a745; color:#fff;">Completed</span>`;
+                    statusBadgeHTML = `<span class="badge badge-complete">Completed</span>`;
+                } else if (job.status === 'in_progress') {
+                    statusBadgeHTML = `<span class="badge badge-progress">In Progress</span>`;
+                } else {
+                    statusBadgeHTML = `<span class="badge badge-pending">Pending</span>`;
                 }
 
                 let notesSectionHTML = '';
@@ -766,6 +751,7 @@
                     </div>
                     <div style="display: flex; gap: 5px; margin-top: 4px; flex-wrap: wrap;">
                         <span class="badge badge-type">${job.type} ${job.type === 'Fieldwork' ? '- Field ' + job.field : ''}</span>
+                        <span class="badge" style="background:#222; color:#aaa;">Created M${job.month || 1}</span>
                         ${job.recurring ? '<span class="badge" style="background:#770202;">Recurring</span>' : ''}
                         ${isOverdue ? '<span class="badge badge-overdue">Overdue</span>' : ''}
                     </div>
@@ -837,6 +823,12 @@
             const job = jobs.find(j => j.id === id);
             if (job && job.assignedWorkers) {
                 job.assignedWorkers = job.assignedWorkers.filter(name => name !== currentUser.name);
+                
+                // If no one is assigned left, and it's not complete, revert back to pending
+                if (job.assignedWorkers.length === 0 && job.status !== 'complete' && job.status !== 'cancelled') {
+                    job.status = 'pending';
+                }
+
                 saveJobs();
                 renderJobs();
             }
@@ -846,7 +838,6 @@
             const job = jobs.find(j => j.id === id);
             if (job) {
                 job.status = newStatus;
-                // If starting/reopening and no one is assigned, assign current user automatically
                 if (newStatus === 'in_progress' && (!job.assignedWorkers || job.assignedWorkers.length === 0)) {
                     job.assignedWorkers = [currentUser.name];
                 }
@@ -856,7 +847,7 @@
         }
 
         function cancelJob(id) {
-            if (confirm("Are you sure you want to cancel this job? It will show as complete with a cancelled tag.")) {
+            if (confirm("Are you sure you want to cancel this job?")) {
                 const job = jobs.find(j => j.id === id);
                 if (job) {
                     job.status = 'cancelled';
@@ -935,8 +926,7 @@
 
         function openCreateModal() {
             document.getElementById('job-form').reset();
-            document.getElementById('job-deadline-month').value = currentMonth;
-            autoSetPriorityByDeadline();
+            document.getElementById('job-deadline-month').value = '';
             toggleFieldSelect();
             document.getElementById('job-modal').style.display = 'flex';
         }
@@ -952,7 +942,8 @@
             const field = document.getElementById('job-field').value;
             const equipment = document.getElementById('job-equipment').value;
             const equipmentStatus = document.getElementById('job-equipment-status').value;
-            const deadlineMonth = parseInt(document.getElementById('job-deadline-month').value);
+            const deadlineInput = document.getElementById('job-deadline-month').value;
+            const deadlineMonth = deadlineInput ? parseInt(deadlineInput) : null;
             const priority = document.getElementById('job-priority').value;
             const desc = document.getElementById('job-desc').value;
             const recurring = document.getElementById('job-recurring').checked;
