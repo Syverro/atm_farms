@@ -145,6 +145,29 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        /* Controls Bar (Filter/Search) */
+        .filter-bar {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            padding: 12px 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .filter-bar input, .filter-bar select {
+            padding: 8px 12px;
+            background: #1e1e1e;
+            border: 1px solid var(--border-color);
+            color: var(--text-light);
+            border-radius: 4px;
         }
 
         /* Tabs */
@@ -220,6 +243,7 @@
 
         .badge-type { background: #333; color: #fff; }
         .badge-priority { background: #222; }
+        .badge-overdue { background: #b30000; color: #fff; }
 
         .job-details {
             font-size: 14px;
@@ -325,10 +349,24 @@
         <!-- Farm Manager Bar -->
         <div id="manager-bar" class="manager-bar hidden">
             <h3>Manager Controls</h3>
-            <div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                 <button class="btn" onclick="openCreateModal()">+ Create New Job</button>
                 <button class="btn btn-secondary" onclick="advanceMonth()" title="Rolls over recurring jobs to the next month">Advance Month ➔</button>
+                <button class="btn btn-secondary" onclick="exportData()" title="Backup jobs and field maps">Export Backup</button>
+                <button class="btn btn-secondary" onclick="document.getElementById('import-file').click()" title="Restore jobs and field maps">Import Backup</button>
+                <input type="file" id="import-file" class="hidden" accept=".json" onchange="importData(event)">
             </div>
+        </div>
+
+        <!-- Filter & Search Bar -->
+        <div class="filter-bar">
+            <input type="text" id="search-input" placeholder="Search jobs or field #..." oninput="renderJobs()" style="flex-grow: 1;">
+            <select id="filter-type" onchange="renderJobs()">
+                <option value="all">All Job Types</option>
+                <option value="Fieldwork">Fieldwork</option>
+                <option value="Animals">Animals</option>
+                <option value="Other">Other</option>
+            </select>
         </div>
 
         <!-- Filter Tabs -->
@@ -416,7 +454,7 @@
 
     <!-- Footer -->
     <footer>
-        At The Mile Farms Portal &bull; Version 1.2.0 &bull; Build 2026.09.23
+        At The Mile Farms Portal &bull; Version 1.3.0 &bull; Build 2026.09.23
     </footer>
 
     <script>
@@ -543,6 +581,44 @@
             }
         }
 
+        // --- Backup Export & Import ---
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
+                jobs,
+                fieldMaps,
+                month: currentMonth
+            }));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `ATM_Farms_Backup_M${currentMonth}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (imported.jobs) jobs = imported.jobs;
+                    if (imported.fieldMaps) fieldMaps = imported.fieldMaps;
+                    if (imported.month) currentMonth = imported.month;
+
+                    saveJobs();
+                    localStorage.setItem('fs_field_maps', JSON.stringify(fieldMaps));
+                    updateMonthDisplay();
+                    renderJobs();
+                    alert("Data backup successfully restored!");
+                } catch(err) {
+                    alert("Invalid backup file format.");
+                }
+            };
+            reader.readAsText(file);
+        }
+
         // --- Job Logic & Render ---
         function switchTab(tab, element) {
             currentTab = tab;
@@ -559,16 +635,28 @@
             const grid = document.getElementById('job-grid');
             grid.innerHTML = '';
 
-            const filteredJobs = jobs.filter(j => j.status === currentTab && j.month === currentMonth);
+            const searchQuery = document.getElementById('search-input').value.toLowerCase();
+            const filterType = document.getElementById('filter-type').value;
+
+            const filteredJobs = jobs.filter(j => {
+                const matchesTab = j.status === currentTab && j.month === currentMonth;
+                const matchesSearch = j.title.toLowerCase().includes(searchQuery) || (j.field && j.field.toString().includes(searchQuery));
+                const matchesType = filterType === 'all' || j.type === filterType;
+                return matchesTab && matchesSearch && matchesType;
+            });
 
             if (filteredJobs.length === 0) {
-                grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-dim); padding: 40px;">No jobs in this category for Month ${currentMonth}.</div>`;
+                grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-dim); padding: 40px;">No jobs match your filter for Month ${currentMonth}.</div>`;
                 return;
             }
+
+            const todayStr = new Date().toISOString().split('T')[0];
 
             filteredJobs.forEach(job => {
                 const card = document.createElement('div');
                 card.className = `job-card ${job.priority}-priority`;
+
+                const isOverdue = job.deadline && job.deadline < todayStr && job.status !== 'complete';
 
                 let mapImageHTML = '';
                 if (job.type === 'Fieldwork' && fieldMaps[`field_${job.field}`]) {
@@ -583,6 +671,7 @@
                     <div style="display: flex; gap: 5px; margin-top: 4px; flex-wrap: wrap;">
                         <span class="badge badge-type">${job.type} ${job.type === 'Fieldwork' ? '- Field ' + job.field : ''}</span>
                         ${job.recurring ? '<span class="badge" style="background:#770202;">Recurring</span>' : ''}
+                        ${isOverdue ? '<span class="badge badge-overdue">Overdue</span>' : ''}
                     </div>
                     <div class="job-details" style="margin-top: 10px;">
                         ${job.deadline ? `<p><strong>Deadline:</strong> ${job.deadline}</p>` : ''}
